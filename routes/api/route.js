@@ -1,207 +1,484 @@
 const express = require('express');
 const router = express.Router();
-const uuid =require('uuid');
-const fs= require('fs');
+const uuid = require('uuid');
+const fs = require('fs');
 const path = require('path');
 // let users =require('../../Users');
-const db=require('./data');
-
- db.authenticate()
+const session = require('express-session');
+const db = require('./data');
+const products = require('./tables/products');
+const productlines = require('./tables/productlines');
+const payments = require('./tables/payments');
+const orders = require('./tables/orders');
+const orderdetails = require('./tables/orderdetails');
+const offices = require('./tables/offices');
+const employees = require('./tables/employees');
+const customers = require('./tables/customers');
+const Sequelize = require('sequelize');
+const bcrypt = require('bcrypt');
+const Op = Sequelize.Op;
+db.authenticate()
   .then(() => {
     console.log('Connection has been established successfully.');
   })
   .catch(err => {
-    console.error('Unable to connect to the database:', err);
+    console.error('Unable to connect to the database:', next);
   });
-  
-router.get('/orderlist',(req,res)=>{
+
+//get address  
+
+router.get('/', (req, res, next) => {
 
 
-    res.sendFile(path.join(__dirname,`..`,`..`,`Order_list.html`));
-   // res.send(result);
-  
+  res.sendFile(path.join(__dirname, `..`, `..`, `ProductLotList.html`));
+  // res.send(result);
+
 });
 
 
-router.get('/data/productlines',(req,res)=>{
-  
-  db.query(`SELECT * FROM  productlines`, { type: db.QueryTypes.SELECT})
-  .then(result => {console.log(result);
-  res.send(result);
-  })
-  .catch(err => {console.log(err);});
+router.get('/productslist', (req, res, next) => {
+  res.sendFile(path.join(__dirname, `..`, `..`, `ProductLotList.html`), { name: req.user });
+  // res.send(result);
 });
-//products sreach api
-router.get('/data/products/:size&:vender',(req,res)=>{
+
+router.get('/search/productlines', (req, res, next) => {
+
+  productlines.findAll()
+    .then(result => {
+      //console.log(result);
+      res.send(result);
+    })
+    .catch(err => { console.log(next); });
+
+});
+
+router.get('/login/:email', (req, res, next) => {
+  employees.findAll({
+    where: {
+      email: '${req.params.email}',
+    }
+  }).then(result => {
+    //console.log(result);
+    res.send(result);
+  }).catch(err => { console.log(next); });
+
+});
+//////////////////////products search api//////////////////////////
+router.get('/search/products', (req, res, next) => {
   //console.log(`${req.params.size}`);
   /*
   ex. not select size and vendor
-  http://localhost:9000/data/products/-&-
-  ex. not select size only
-  http://localhost:9000/data/products/1:700&-
-   ex. not select size and vendor
-  http://localhost:9000/data/products/1:700&Min Lin Diecast
+  http://localhost:9000/search/products/
 
   */
-  console.log(`${req.params.size}|${req.params.vender}|${req.params.name}`);
-  let size= req.params.size=='none'?'%':req.params.size;
-  let vendor= req.params.vender=='none'?'%':req.params.vender;
-
-  db.query(`SELECT * FROM products WHERE productScale LIKE "${size}" AND productVendor LIKE "${vendor}" ORDER BY productName,productScale,productVendor `, { type: db.QueryTypes.SELECT})
-  .then(result => {console.log(result);
-  res.send(result);
+  //console.log(`${req.params.size}|${req.params.vender}|${req.params.name}`);
+  // db.query(`SELECT * FROM products ORDER BY productName,productScale,productVendor `, { type: db.QueryTypes.SELECT})
+  products.findAll({
+    order: [`productName`, `productScale`, `productVendor`]
   })
-  .catch(err => {console.log(err);});
+    .then(result => {
+      //console.log(result);
+      res.send(result);
+    })
+    .catch(err => { console.log(next); });
 });
 
-router.get('/data/products/:size&:vender/name=:name',(req,res)=>{
+router.get('/search/products/name=:name', (req, res, next) => {
   //console.log(`${req.params.size}`);
   /*
   ex. 
-  http://localhost:9000/data/products/-&-/name=Alpine
+  http://localhost:9000/search/products/-&-/name=Alpine
   ex. not select size only
   */
 
-  console.log(`${req.params.size}|${req.params.vender}|${req.params.name}`);
-  let size= req.params.size=='none'?'%':req.params.size;
-  let vendor= req.params.vender=='none'?'%':req.params.vender;
-  let name= req.params.name=='0'?'%':req.params.name;
-  db.query(`SELECT * FROM products WHERE productScale LIKE "${size}" AND productVendor LIKE "${vendor}" AND productName LIKE '%${name}%' ORDER BY productName,productScale,productVendor`, { type: db.QueryTypes.SELECT})
-  .then(result => {console.log(result);
-  res.send(result);
+  console.log(`${req.params.name}`);
+  //db.query(`SELECT * FROM products WHERE productName LIKE '%${name}%' ORDER BY productName,productScale,productVendor`, { type: db.QueryTypes.SELECT})
+  let name = req.params.name == '0' ? '%' : req.params.name;
+  products.findAll({
+
+    where:
+    {
+      productName: {
+        [Op.like]: `%${name}%`
+      }
+    },
+    order: [`productName`, `productScale`, `productVendor`]
   })
-  .catch(err => {console.log(err);});
+    .then(result => {
+     // console.log(result);
+      res.send(result);
+    })
+    .catch(err => { console.log(next); });
 });
 
-router.get('/data/products/:size&:vender/code=:code',(req,res)=>{
+router.get('/search/products/code=:code', (req, res, next) => {
   /*
   ex. 
-  http://localhost:9000/data/products/-&-/code=S12_1099
+  http://localhost:9000/search/products/-&-/code=S12_1099
   ex. not select size only
   */
   //console.log(`${req.params.size}`);
-  console.log(`${req.params.size}|${req.params.vender}|${req.params.name}`);
-  let size= req.params.size=='none'?'%':req.params.size;
-  let vendor= req.params.vender=='none'?'%':req.params.vender;
-  let code= req.params.code=='0'?'%':req.params.code;
-  db.query(`SELECT * FROM products WHERE productScale LIKE "${size}" AND productVendor LIKE "${vendor}" AND productCodeLIKE '%${code}%' ORDER BY productCode,productName,productScale,productVendor`, { type: db.QueryTypes.SELECT})
-  .then(result => {console.log(result);
-  res.send(result);
+
+  let code = req.params.code == '0' ? '%' : req.params.code;
+  products.findAll({
+    where:
+    {
+      productName: {
+        [Op.like]: `%${code}%`
+      }
+    },
+    order: [`productCode`, `productName`, `productScale`, `productVendor`]
   })
-  .catch(err => {console.log(err);});
+    // db.query(`SELECT * FROM products WHERE productCode LIKE '%${code}%' ORDER BY productCode,productName,productScale,productVendor`, { type: db.QueryTypes.SELECT})
+    .then(result => {
+      console.log(result);
+      res.send(result);
+    })
+    .catch(err => { console.log(next); });
 });
 
-
-router.get('/data/products/size',(req,res)=>{
+router.get('/search/products/allSize', (req, res, next) => {
   //console.log(`${req.params.size}`);
-  db.query(`SELECT productScale FROM products GROUP by productScale`, { type: db.QueryTypes.SELECT})
-  .then(result => {console.log(result);
-  res.send(result);
+  products.findAll({
+    attributes: [Sequelize.literal('DISTINCT `productScale`'), 'productScale'],
+    order: ['productScale']
   })
-  .catch(err => {console.log(err);});
+    // db.query(`SELECT productScale FROM products GROUP by productScale`, { type: db.QueryTypes.SELECT})
+    .then(result => {
+      //console.log(result);
+      res.send(result);
+    })
+    .catch(err => { console.log(next); });
 
 });
-router.get('/data/products/vendor',(req,res)=>{
+router.get('/search/products/allVendor', (req, res, next) => {
+  //console.log(`${req.params.size}`);\
+  products.findAll({
+    attributes: [Sequelize.literal('DISTINCT `productVendor`'), 'productVendor'],
+    order: ['productVendor']
+  })
+    // db.query(`SELECT productVendor FROM products GROUP by productVendor`, { type: db.QueryTypes.SELECT})
+    .then(result => {
+     // console.log(result);
+      res.send(result);
+    })
+    // db.query(`SELECT productVendor FROM products GROUP by productVendor`, { type: db.QueryTypes.SELECT})
+    .then(result => {
+      //console.log(result);
+      res.send(result);
+    })
+    .catch(err => { console.log(next); });
+
+});
+
+router.get('/data/products/:code', (req, res, next) => {
+  /*
+  ex. 
+  http://localhost:9000/search/products/-&-/code=S12_1099
+  ex. not select size only
+  */
   //console.log(`${req.params.size}`);
-  db.query(`SELECT productVendor FROM products GROUP by productVendor`, { type: db.QueryTypes.SELECT})
-  .then(result => {console.log(result);
-  res.send(result);
+  let code = req.params.code;
+  products.findAll({
+    where: {
+      productCode: `${code}`
+    }
+  }).then(result => {
+   // console.log(result);
+    res.send(result);
   })
-  .catch(err => {console.log(err);});
+    .catch(err => { console.log(next); });
+});
+
+
+///////////////////////////custommer////////////////////////////////////////////
+router.get('/search/customers', (req, res, next) => {
+  customers.findAll({
+    order: [`customerName`]
+  })
+    /* db.query(`SELECT *
+     FROM customers
+     ORDER by customerName `, { type: db.QueryTypes.SELECT})*/
+
+    .then(result => {
+      console.log(result);
+      res.send(result);
+    })
+    .catch(err => { console.log(next); });
 
 });
-//custommer
+
+
+
+router.get('/sreach/customers/name=:name', (req, res, next) => {
+
+  customers.findAll({
+
+    where:
+    {
+      customerName: {
+        [Op.like]: `${req.params.name}%`
+      }
+    }
+    ,
+    order: [`customerName`]
+  })
+    /* db.query(`SELECT *
+     FROM customers
+     WHERE customerName LIKE '${req.params.name}%';
+     ORDER by customerName  `, { type: db.QueryTypes.SELECT})*/
+    .then(result => {
+      console.log(result);
+      res.send(result);
+    })
+    .catch(err => { console.log(next); });
+});
+
+router.get('/search/customers/number=:number', (req, res, next) => {
+  customers.findAll({
+
+    where:
+    {
+      customerNumber: {
+        [Op.like]: `${req.params.number}%`
+      }
+    }
+    ,
+    order: [`customerName`]
+  })
+    /*db.query(`SELECT *
+    FROM customers
+    WHERE customerNumber LIKE '${req.params.number}%';
+    ORDER by customerNumber,customerName  `, { type: db.QueryTypes.SELECT})*/
+    .then(result => {
+      console.log(result);
+      res.send(result);
+    })
+    .catch(err => { console.log(next); });
+});
+
+
+router.get('/data/customers/number=:number', (req, res, next) => {
+  customers.findAll({
+
+    where:
+    {
+      customerNumber: `${req.params.number}`
+    }
+    ,
+    order: [`customerNumber`, `customerName`]
+  })
+    /*db.query(`SELECT *
+    FROM customers
+    WHERE customerNumber = '${req.params.number}';
+    ORDER by customerNumber,customerName`, { type: db.QueryTypes.SELECT})*/
+    .then(result => {
+      console.log(result);
+      res.send(result[0]);
+    })
+    .catch(err => { console.log(next); });
+});
+
+router.get('/customerInfo',(req,res)=>{
+  res.sendFile(path.join(__dirname,`..`,`..`,`Profile.html`), { name: req.user });
+ // res.send(result);
+});
+
+router.get('/customerlist',(req,res)=>{
+  res.sendFile(path.join(__dirname,`..`,`..`,`CustomerList.html`));
+ // res.send(result);
+});
+
+
+router.get('/customerorder',(req,res)=>{
+  res.sendFile(path.join(__dirname,`..`,`..`,`Customer_DetailOrder.html`));
+ // res.send(result);
+});
+
 router.get('/data/customers',(req,res)=>{
   
   db.query(`SELECT *
   FROM customers
-  ORDER by customerName `, { type: db.QueryTypes.SELECT})
+  ORDER by customerNumber,customerName`, { type: db.QueryTypes.SELECT})
   .then(result => {console.log(result);
   res.send(result);
   })
   .catch(err => {console.log(err);});
+});
+///////////////////employees//////////////////////////
+router.get('/employeeInfo',(req,res)=>{
+  res.sendFile(path.join(__dirname,`..`,`..`,`EmployeeInfo.html`), { name: req.user });
+ // res.send(result);
 });
 
-router.get('/data/customers/name=:name',(req,res)=>{
-  
-  db.query(`SELECT *
-  FROM customers
-  WHERE customerName LIKE '${req.params.name}%';
-  ORDER by customerName  `, { type: db.QueryTypes.SELECT})
-  .then(result => {console.log(result);
-  res.send(result);
-  })
-  .catch(err => {console.log(err);});
+router.get('/search/employees', (req, res, next) => {
+  employees.findAll()
+    /* db.query(`SELECT jobTitle
+     FROM employees
+     GROUP BY jobTitle`, { type: db.QueryTypes.SELECT})*/
+    .then(result => {
+      console.log(result);
+      res.send(result);
+    })
+    .catch(err => { console.log(next); });
 });
 
-router.get('/data/customers/number=:number',(req,res)=>{
-  
-  db.query(`SELECT *
-  FROM customers
-  WHERE customerNumber LIKE '${req.params.number}%';
-  ORDER by customerNumber,customerName  `, { type: db.QueryTypes.SELECT})
-  .then(result => {console.log(result);
-  res.send(result);
+router.get('/search/employees/allTitle', (req, res, next) => {
+  employees.findAll({
+    attributes: [Sequelize.literal('DISTINCT `jobTitle`'), 'jobTitle']
   })
-  .catch(err => {console.log(err);});
+    /* db.query(`SELECT jobTitle
+     FROM employees
+     GROUP BY jobTitle`, { type: db.QueryTypes.SELECT})*/
+    .then(result => {
+      console.log(result);
+      res.send(result);
+    })
+    .catch(err => { console.log(next); });
 });
 
-//employees
-router.get('/data/employees/allTitle',(req,res)=>{
-  
-  db.query(`SELECT jobTitle
-  FROM employees
-  GROUP BY jobTitle`, { type: db.QueryTypes.SELECT})
-  .then(result => {console.log(result);
-  res.send(result);
+// router.get('/search/employees/name=:name',(req,res,next)=>{
+
+//   let name= req.params.name=='0'?'%':req.params.name;
+//   employees.findAll({
+
+//     where:
+//     {
+//       customerNumber:{
+//         [Op.like]: `${req.params.number}%`
+//       }
+//   }
+//   ,
+//       order:[`customerName`]
+//   })
+//   db.query(`SELECT *
+//   FROM employees
+//   WHERE employees.firstName||" "||employees.lastName LIKE '%${name}% '
+//   ORDER BY employees.firstName,employees.lastName`, { type: db.QueryTypes.SELECT})
+//   .then(result => {console.log(result);
+//   res.send(result);
+//   })
+//   .catch(err => {console.log(next);});
+// });
+
+
+router.get('/search/employees/number=:number', (req, res, next) => {
+
+  let number = req.params.number == '0' ? '%' : req.params.number;
+  employees.findAll({
+
+    where:
+    {
+      employeeNumber: {
+        [Op.like]: `%${number}%`
+      }
+    }
+    ,
+    order: [`employeeNumber`, `firstName`, `lastName`]
   })
-  .catch(err => {console.log(err);});
+    .then(result => {
+      console.log(result);
+      res.send(result);
+    })
+    .catch(err => { console.log(next); });
 });
 
-router.get('/data/employees/:title',(req,res)=>{
-  let t= req.params.title=='none'?'%':req.params.title;
-  db.query(`SELECT *
-  FROM employees
-  WHERE jobTitle LIKE '${t}'`, { type: db.QueryTypes.SELECT})
-  .then(result => {console.log(result);
-  res.send(result);
+
+router.get('/data/employees/:number', (req, res, next) => {
+  employees.findAll({
+
+    where:
+    {
+      employeeNumber: `${req.params.number}`
+    }
   })
-  .catch(err => {console.log(err);});
+    .then(result => {
+      //console.log(result);
+      res.send(result[0]);
+
+    })
+    .catch(err => { console.log(next); });
+});
+//////////////order/////////////////////////////////////
+router.get('/search/orders', (req, res, next) => {
+  orders.findAll()
+    .then(result => {
+      console.log(result);
+      res.send(result);
+    })
+    .catch(err => { console.log(next); });
+});
+//////////////////////////////////////////////////////////////////////////////////////////
+
+router.get('/i', (req, res, next) => {
+
+  db.query(`INSERT INTO productlines SELECT * FROM productlines`, { type: db.QueryTypes.INSERT })
+    .then(result => {
+      console.log(result);
+      res.sendFile(path.join(__dirname, `..`, `..`, `LOGIN.html`));
+    })
+    .catch(err => { console.log(next); });
 });
 
-router.get('/data/employees/:title/name=:name',(req,res)=>{
-  let t= req.params.title=='none'?'%':req.params.title;
-  let name= req.params.name=='0'?'%':req.params.name;
-  db.query(`SELECT *
-  FROM employees
-  WHERE jobTitle LIKE '${t}' AND employees.firstName||" "||employees.lastName LIKE '%${name}% '
-  ORDER BY employees.firstName,employees.lastName`, { type: db.QueryTypes.SELECT})
-  .then(result => {console.log(result);
-  res.send(result);
-  })
-  .catch(err => {console.log(err);});
-});
-router.get('/data/employees/:title/number=:number',(req,res)=>{
-  let t= req.params.title=='none'?'%':req.params.title;
-  let number= req.params.number=='0'?'%':req.params.number;
-  db.query(`SELECT *
-  FROM employees
-  WHERE jobTitle LIKE '${t}' AND employees.employeeNumber LIKE '%${number}% '
-  ORDER BY  employees.employeeNumber,employees.firstName,employees.lastName`, { type: db.QueryTypes.SELECT})
-  .then(result => {console.log(result);
-  res.send(result);
-  })
-  .catch(err => {console.log(err);});
-});
-router.get('/i',(req,res)=>{
+/////////////////////////
+router.get('/login', (req, res, next) => {
 
-  db.query(`SELECT ${req,this.param,name} FROM  productlines`, { type: db.QueryTypes.SELECT})
-  .then(result => {console.log(result);
-  res.send(result);
-  })
-  .catch(err => {console.log(err);});
-});
-    
 
+  res.sendFile(path.join(__dirname, `..`, `..`, `LOGIN.html`));
+  // res.send(result);
+
+});
+
+
+router.post('/login', (req, res, next) => {
+  // console.log(req);
+  // (req, res) => res.sendFile('productslist', req.user)
+
+  console.log(req.body.username);
+  console.log(req.body.password);
+  const username = req.body.username;
+  const password = req.body.password;
+  employees.findAll({
+    where: {
+      employeeNumber: `${username}`
+    }
+  }).then(result => {
+    // console.log(result[0]);
+    const user = result[0];
+    if (user == undefined) {
+      console.log("authirize fail :user not found");
+
+    }
+    else {
+      // let hashPass;
+      // bcrypt.genSalt(10, function (err, salt) {
+      //   bcrypt.hash(password, salt, function (err, hash) {
+      //     hashPass=hash;
+      //     console.log(`hash:${hashPass}|||${user.password}`);
+
+      //   });
+      // });
+
+      bcrypt.compare(password,user.password, function(err, resq) {
+        if(resq)
+        {
+        console.log("authirize succes");
+        res.send(user);
+        }
+        else
+        {
+          console.log("authirize fail worng password");
+
+        }
+    });
+      // if (user.password === hashPass) {
+      //   console.log("authirize succes");
+      //   res.send(user);
+      // }
+       
+    }
+  });
+
+});
 
 module.exports = router;
